@@ -12,7 +12,9 @@
 #include <assert.h>
 
 int size;
-const int BLOCK_SIZE = 32;
+
+const int BLOCK_SIZE = 16;
+//const int SHARED_SIZE = 16;
 
 typedef struct
 {
@@ -145,30 +147,23 @@ __global__ void mm_kernel(matrix a, matrix b, matrix result, int size)
         int bStep = BLOCK_SIZE * size;
         
         float Csub = 0;
-
+        //printf("here \n");
         for (int _a = aBegin, _b = bBegin;
              _a <= aEnd;
              _a += aStep, _b += bStep) {
             
             __shared__ float As[BLOCK_SIZE][BLOCK_SIZE];
             __shared__ float Bs[BLOCK_SIZE][BLOCK_SIZE];
-            if (_a  + size * ty + tx < size * size) {
-                int a_i = (_a + size * ty  + tx) / size;
-                int a_j = (_a + size * ty + tx)  % size;
+            int a_index = _a + size * ty + tx;
+            int a_i = a_index / size;
+            int a_j = a_index % size;
 
-                As[ty][tx] = a[a_i][a_j];
-            } else {
-                As[ty][tx] = 0;
-            }
+            int b_index = _b + size * ty + tx;
+            int b_i = b_index / size;
+            int b_j = b_index % size;
 
-            if (_b + size * ty + tx < size * size) {
-                int b_i = (_b + size * ty + tx) / size;
-                int b_j = (_b + size * ty + tx) % size;
-
-                Bs[ty][tx] = b[b_i][b_j];
-            } else {
-                Bs[ty][tx] = 0;
-            }
+            As[ty][tx] = a_i < size ? a.element[a_i][a_j] : 0;
+            Bs[ty][tx] = b_i < size ? b.element[b_i][b_j] : 0;
 
             __syncthreads();
 
@@ -180,8 +175,10 @@ __global__ void mm_kernel(matrix a, matrix b, matrix result, int size)
 
         }
 
-        int c = size * BLOCK_SIZE * by + BLOCK_SIZE * bx;
-        result[c + size  * ty + tx] = Csub;
+        int c_index = size * BLOCK_SIZE * by + BLOCK_SIZE * bx + size * ty + tx;
+        int c_i = c_index / size;
+        int c_j = c_index % size;
+        result.element[c_i][c_j] = Csub;
 
         /*int i = blockIdx.x * blockDim.x + threadIdx.x; 
 	int j = blockIdx.y * blockDim.y + threadIdx.y;
@@ -189,21 +186,8 @@ __global__ void mm_kernel(matrix a, matrix b, matrix result, int size)
 
 	if (i >= size || j >= size)
 		return;
-       // const int SIZE = size;
-        __shared__ float d_a[][];
-        __shared__ float d_b[][];
-
-        //allocate_matrix(&d_a);
-        //allocate_matrix(&d_b);
-        
-        d_a[i][j] = a.element[i][j];
-        d_b[i][j] = b.element[i][j];
-
-        __syncthreads();
-
 	for(k = 0; k < size; k++)
-	    result.element[i][j] += d_a[i][k] * d_b[k][j];
-        __syncthreads();*/
+	    result.element[i][j] += a.element[i][k] * b.element[k][j];*/
 }
 
 void print_matrix(matrix m)
