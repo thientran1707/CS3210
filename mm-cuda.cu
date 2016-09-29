@@ -12,6 +12,7 @@
 #include <assert.h>
 
 int size;
+const int BLOCK_SIZE = 32;
 
 typedef struct
 {
@@ -127,15 +128,82 @@ void mm(matrix a, matrix b, matrix result)
  */
 __global__ void mm_kernel(matrix a, matrix b, matrix result, int size)
 {
-	int i = blockIdx.x * blockDim.x + threadIdx.x; 
+        // Block index
+        int bx = blockIdx.x;
+        int by = blockIdx.y;
+
+        // Thread index
+        int tx = threadIdx.x;
+        int ty = threadIdx.y;
+
+        // begin of the first sub-matrix of A processed by the block
+        int aBegin = size * BLOCK_SIZE * by;
+        int aEnd = aBegin + size - 1;
+        int aStep = BLOCK_SIZE;
+
+        int bBegin = BLOCK_SIZE * bx;
+        int bStep = BLOCK_SIZE * size;
+        
+        float Csub = 0;
+
+        for (int _a = aBegin, _b = bBegin;
+             _a <= aEnd;
+             _a += aStep, _b += bStep) {
+            
+            __shared__ float As[BLOCK_SIZE][BLOCK_SIZE];
+            __shared__ float Bs[BLOCK_SIZE][BLOCK_SIZE];
+            if (_a  + size * ty + tx < size * size) {
+                int a_i = (_a + size * ty  + tx) / size;
+                int a_j = (_a + size * ty + tx)  % size;
+
+                As[ty][tx] = a[a_i][a_j];
+            } else {
+                As[ty][tx] = 0;
+            }
+
+            if (_b + size * ty + tx < size * size) {
+                int b_i = (_b + size * ty + tx) / size;
+                int b_j = (_b + size * ty + tx) % size;
+
+                Bs[ty][tx] = b[b_i][b_j];
+            } else {
+                Bs[ty][tx] = 0;
+            }
+
+            __syncthreads();
+
+            for (int k = 0; k < BLOCK_SIZE; k++) {
+                Csub += As[ty][k] * Bs[k][tx];
+            }
+
+            __syncthreads();
+
+        }
+
+        int c = size * BLOCK_SIZE * by + BLOCK_SIZE * bx;
+        result[c + size  * ty + tx] = Csub;
+
+        /*int i = blockIdx.x * blockDim.x + threadIdx.x; 
 	int j = blockIdx.y * blockDim.y + threadIdx.y;
 	int k;
 
 	if (i >= size || j >= size)
 		return;
+       // const int SIZE = size;
+        __shared__ float d_a[][];
+        __shared__ float d_b[][];
+
+        //allocate_matrix(&d_a);
+        //allocate_matrix(&d_b);
+        
+        d_a[i][j] = a.element[i][j];
+        d_b[i][j] = b.element[i][j];
+
+        __syncthreads();
 
 	for(k = 0; k < size; k++)
-		result.element[i][j] += a.element[i][k] * b.element[k][j];
+	    result.element[i][j] += d_a[i][k] * d_b[k][j];
+        __syncthreads();*/
 }
 
 void print_matrix(matrix m)
@@ -156,6 +224,8 @@ void print_matrix(matrix m)
 void work()
 {
 	matrix a, b, result1, result2;
+        //matrix d_a, d_b, d_result2;
+
 	long long before, after;
 	int correct, i, j, dim;
 	cudaError_t rc;
@@ -164,26 +234,27 @@ void work()
 	allocate_matrix(&a);
 	allocate_matrix(&b);
 	allocate_matrix(&result1);
-	allocate_matrix(&result2);	
+	allocate_matrix(&result2);
 
 	// Initialize matrix elements
 	init_matrix(a);
 	init_matrix(b);
 
-	// Perform sequential matrix multiplication
 	before = wall_clock_time();
 	mm(a, b, result1);
 	after = wall_clock_time();
         fprintf(stderr, "Matrix multiplication on CPU took %1.2f seconds\n", ((float)(after - before))/1000000000);
 
 	// Perform CUDA matrix  multiplication
-	dim3 block(32, 32);			// a block of 32 x 32 CUDA threads
-	dim = (size % 32 == 0) ? size / 32 : size / 32 + 1; 
+	dim3 block(BLOCK_SIZE, BLOCK_SIZE);			// a block of 32 x 32 CUDA threads
+	dim = (size % BLOCK_SIZE == 0) ? size / BLOCK_SIZE : size / BLOCK_SIZE + 1; 
 	dim3 grid(dim, dim);	// a grid of CUDA thread blocks
+
 	before = wall_clock_time();
 	mm_kernel<<<grid, block>>>(a, b, result2, size);
 	cudaDeviceSynchronize();
 	after = wall_clock_time();
+
 	fprintf(stderr, "Matrix multiplication on GPU took %1.2f seconds\n", ((float)(after - before))/1000000000);
 
 	// was there any error?
