@@ -14,7 +14,6 @@
 int size;
 
 const int BLOCK_SIZE = 16;
-//const int SHARED_SIZE = 16;
 
 typedef struct
 {
@@ -138,7 +137,7 @@ __global__ void mm_kernel(matrix a, matrix b, matrix result, int size)
         int tx = threadIdx.x;
         int ty = threadIdx.y;
 
-        // begin of the first sub-matrix of A processed by the block
+        // begin of the first sub-matrix of a processed by the block
         int aBegin = size * BLOCK_SIZE * by;
         int aEnd = aBegin + size - 1;
         int aStep = BLOCK_SIZE;
@@ -147,7 +146,7 @@ __global__ void mm_kernel(matrix a, matrix b, matrix result, int size)
         int bStep = BLOCK_SIZE * size;
         
         float Csub = 0;
-        //printf("here \n");
+
         for (int _a = aBegin, _b = bBegin;
              _a <= aEnd;
              _a += aStep, _b += bStep) {
@@ -179,15 +178,6 @@ __global__ void mm_kernel(matrix a, matrix b, matrix result, int size)
         int c_i = c_index / size;
         int c_j = c_index % size;
         result.element[c_i][c_j] = Csub;
-
-        /*int i = blockIdx.x * blockDim.x + threadIdx.x; 
-	int j = blockIdx.y * blockDim.y + threadIdx.y;
-	int k;
-
-	if (i >= size || j >= size)
-		return;
-	for(k = 0; k < size; k++)
-	    result.element[i][j] += a.element[i][k] * b.element[k][j];*/
 }
 
 void print_matrix(matrix m)
@@ -208,7 +198,6 @@ void print_matrix(matrix m)
 void work()
 {
 	matrix a, b, result1, result2;
-        //matrix d_a, d_b, d_result2;
 
 	long long before, after;
 	int correct, i, j, dim;
